@@ -16,6 +16,7 @@ from common.text import *
 from common.const import *
 from common.logger import writeLog
 from argparse import RawTextHelpFormatter
+
 isWinPlatform = sys.platform in ['win32', 'win64']
 if isWinPlatform:
     import winreg
@@ -158,7 +159,7 @@ def setCookie(cookie=''):  # 设置cookie
         cookie = ''
     else:
         cookie = cookie.strip()
-    if cookie:   # 设置cookie
+    if cookie:  # 设置cookie
         token = getToken(cookie)
         if token:
             headers['x-csrf-token'] = token
@@ -231,6 +232,8 @@ def saveEnv():
     conf.set("global", "quoted", getContext("quoted"))
     conf.set("global", "retweeted", getContext("retweeted"))
     conf.set("global", "media", getContext("media"))
+    conf.set("global", "readfile", getContext("readFile"))
+    conf.set("global", "readfilepath", getContext("readFilePath"))
     proxy = getContext("proxy")
     if proxy:
         conf.set("global", "proxy", proxy)
@@ -270,6 +273,10 @@ def getEnv():
                     setContext('quoted', eval(item[1]))
                 elif item[0] == 'retweeted' and item[1]:
                     setContext('retweeted', eval(item[1]))
+                elif item[0] == 'readfilepath' and item[1]:
+                    setContext('readFilePath', str(item[1]))
+                elif item[0] == 'readfile' and item[1]:
+                    setContext('readFile', eval(item[1]))
                 elif item[0] == 'proxy' and item[1] and (pProxy.match(item[1]) or pProxy2.match(item[1])):
                     setContext('proxy', item[1])
             setContext('headers', headers)
@@ -329,7 +336,7 @@ def downloader(client, url: str, filePath: str, fileName: str) -> bool:
                         'downloadFile', response.status_code, getHttpText(response.status_code)))
                     return False
                 with open(f'{filePath}.cache', 'wb') as f:
-                    for chunk in response.iter_bytes(chunk_size=1024*128):
+                    for chunk in response.iter_bytes(chunk_size=1024 * 128):
                         if chunk:
                             f.write(chunk)
                 os.rename(f'{filePath}.cache', filePath)
@@ -381,7 +388,8 @@ def downloadFile(savePath: str, dataList: queue.Queue, done: queue.Queue):
                                     if datatype == 'pic':
                                         url += '?name=orig'  # add query '?name=orig' can get original pic file
                                     fileName = getContext('fileName').format(
-                                        userName=userName, twtId=twtId, ori=ori, date=date, time=time, type=f'{datatype}{count}') + ext
+                                        userName=userName, twtId=twtId, ori=ori, date=date, time=time,
+                                        type=f'{datatype}{count}') + ext
                                     filePath = os.path.join(savePath, fileName)
                                     if os.path.exists(filePath) or os.path.exists(f'{filePath}.cache'):
                                         continue
@@ -423,9 +431,11 @@ return {*} 解析出的目标数据(内含媒体url)
 
 
 def getResult(tweet):
-    def getresult(result): return result if result['__typename'] == 'Tweet' else \
-        (result['tweet'] if result['__typename'] == 'TweetWithVisibilityResults' else
-         ({'errText': result['tombstone']['text']['text']} if result['__typename'] == 'TweetTombstone' else None))
+    def getresult(result):
+        return result if result['__typename'] == 'Tweet' else \
+            (result['tweet'] if result['__typename'] == 'TweetWithVisibilityResults' else
+             ({'errText': result['tombstone']['text']['text']} if result['__typename'] == 'TweetTombstone' else None))
+
     if 'entryId' not in tweet:
         return tweet
     if tweet['content']['entryType'] == 'TimelineTimelineItem':
@@ -476,7 +486,8 @@ def getFollower(pageContent, dataList: list):
         for instruction in instructions:
             if instruction['type'] == 'TimelineAddEntries':
                 entries = instruction['entries']
-                if len(entries) == 0 or len(entries) == 2 and 'entryId' in entries[-2] and 'cursor-bottom' in entries[-2]['entryId']:
+                if len(entries) == 0 or len(entries) == 2 and 'entryId' in entries[-2] and 'cursor-bottom' in \
+                        entries[-2]['entryId']:
                     # 翻页完成, 两个follow接口的entries[-1]为cursor-top, [-2]为cursor-bottom (与推文的接口相反)
                     return None
                 for entry in entries:
@@ -506,10 +517,17 @@ def getTweet(pageContent, cursor=None, isfirst=False):
         entries = list(pageContent['globalObjects']['tweets'].values())
         if not entries and isfirst:
             print(needCookie_warning)
-        cursor = pageContent['timeline']['instructions'][0]['addEntries']['entries'][-1]['content']['operation']['cursor']['value'] \
-            if len(entries) != 0 and pageContent['timeline']['instructions'][0]['addEntries']['entries'][-1]['entryId'] == 'sq-cursor-bottom' \
-            else (pageContent['timeline']['instructions'][-1]['replaceEntry']['entry']['content']['operation']['cursor']['value']
-                  if len(pageContent['timeline']['instructions']) != 1 and pageContent['timeline']['instructions'][-1]['replaceEntry']['entryIdToReplace'] == 'sq-cursor-bottom' else None)
+        cursor = \
+            pageContent['timeline']['instructions'][0]['addEntries']['entries'][-1]['content']['operation']['cursor'][
+                'value'] \
+                if len(entries) != 0 and pageContent['timeline']['instructions'][0]['addEntries']['entries'][-1][
+                'entryId'] == 'sq-cursor-bottom' \
+                else (
+                pageContent['timeline']['instructions'][-1]['replaceEntry']['entry']['content']['operation']['cursor'][
+                    'value']
+                if len(pageContent['timeline']['instructions']) != 1 and
+                   pageContent['timeline']['instructions'][-1]['replaceEntry'][
+                       'entryIdToReplace'] == 'sq-cursor-bottom' else None)
     elif 'user' in pageContent['data']:
         result = pageContent['data']['user']['result']
         if result['__typename'] == 'UserUnavailable':
@@ -531,7 +549,8 @@ def getTweet(pageContent, cursor=None, isfirst=False):
     elif 'threaded_conversation_with_injections_v2' in pageContent['data']:
         entries = pageContent['data']['threaded_conversation_with_injections_v2']['instructions'][0]['entries']
     # 搜索接口返回的entries不包括cursor
-    if len(entries) == 0 or len(entries) == 2 and 'entryId' in entries[-1] and 'cursor-bottom' in entries[-1]['entryId']:
+    if len(entries) == 0 or len(entries) == 2 and 'entryId' in entries[-1] and 'cursor-bottom' in entries[-1][
+        'entryId']:
         # 翻页完成
         return None, None
     tweets = []
@@ -600,7 +619,8 @@ def parseData(pageContent, total, userName, dataList, cfg, rest_id_list, cursor)
         if includeQuoted:  # 包括引用，如 https://twitter.com/Liyu0109/status/1611734998402633728
             # 判断是否有引用，以及引用是否能查看，搜索接口的引用tweet直接在tweet_list里面，其他接口则嵌套在result里面
             if 'quoted_status_result' in result and 'legacy' in result['quoted_status_result']['result']:
-                _userName = result['quoted_status_result']['result']['core']['user_results']['result']['legacy']['screen_name']
+                _userName = result['quoted_status_result']['result']['core']['user_results']['result']['legacy'][
+                    'screen_name']
                 twtId = result['quoted_status_result']['result']['rest_id']
                 legacy = result['quoted_status_result']['result']['legacy']
                 legacylist.append([_userName, twtId, legacy])
@@ -619,7 +639,7 @@ def parseData(pageContent, total, userName, dataList, cfg, rest_id_list, cursor)
             if 'extended_entities' in legacy:
                 for media in legacy['extended_entities']['media']:
 
-                  # photo
+                    # photo
                     if media['type'] == 'photo' and media['type'] in media_type:
                         # get {'url', url}, add query '?name=orig' can get original pic file
                         url = media['media_url_https']
@@ -655,7 +675,8 @@ def parseData(pageContent, total, userName, dataList, cfg, rest_id_list, cursor)
                 twtDic[_userName] = {}
             twtDic[_userName][twtId] = {
                 'dataList': {'pic': picList, 'gif': gifList, 'vid': vidList},
-                'date': time.strftime("%Y%m%d %H%M%S", time.strptime(legacy['created_at'], "%a %b %d %H:%M:%S +0000 %Y"))
+                'date': time.strftime("%Y%m%d %H%M%S",
+                                      time.strptime(legacy['created_at'], "%a %b %d %H:%M:%S +0000 %Y"))
             }
             # get twt text content,Ignore empty text,&非媒体推文过滤器
             if (legacy['full_text'] and 'full_text' in media_type) and (includeNonMedia or isMediaTwt):
@@ -718,6 +739,7 @@ description: 显示配置
 def showConfig():
     def bool2str(b):
         return '是' if b else '否'
+
     proxy = getContext('proxy') or '不使用'
     quoted = bool2str(not getContext('quoted'))
     retweeted = bool2str(not getContext('retweeted'))
@@ -727,8 +749,13 @@ def showConfig():
     fileName = getContext('fileName')
     dl_path = getContext('dl_path')
     type = getContext('type')
+    readFile = bool2str(getContext('readFile'))
+    readFilePath = os.path.realpath(getContext('readFilePath')) + ('(文件有效)' if os.path.exists(
+        getContext('readFilePath')) and os.path.isfile(getContext('readFilePath')) else '(文件无效)') \
+        if getContext("readFilePath") and getContext('readFile') else "未设置"
     print(config_info.format(proxy=proxy, retweeted=retweeted, media=media, cookie=cookie,
-          quoted=quoted, concurrency=concurrency, fileName=fileName, dl_path=dl_path, type=type))
+                             quoted=quoted, concurrency=concurrency, fileName=fileName, dl_path=dl_path, type=type,
+                             readFile=readFile, readFilePath=readFilePath))
 
 
 '''
@@ -761,7 +788,7 @@ def compare_version(version1=None, version2=None, split_flag="."):
     elif int(current_section_version1) < int(current_section_version2):
         return 2
     try:
-        other_section_version1 = version1[version1.index(split_flag)+1:]
+        other_section_version1 = version1[version1.index(split_flag) + 1:]
     except:
         other_section_version1 = ""
     try:

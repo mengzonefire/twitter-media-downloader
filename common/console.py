@@ -18,11 +18,23 @@ from task.userLikesTask import UserLikesTask
 from task.userMediaTask import UserMediaTask
 
 
+def read_data(path):
+    url_list = []
+    f = open(path, 'r', encoding='UTF-8')
+    line = f.readline()
+    while line:
+        if line.startswith("http"):
+            url_list.append(line.replace("\n", '').split(" ")[0])
+        line = f.readline()
+    f.close()
+    return url_list
+
+
 def cmdMode(clearScreen=True):
     if clearScreen:
         clear()
     showConfig()
-    print(input_ask)
+    print(get_input_ask())
     url_list = []
     while True:
         temp = input()
@@ -34,23 +46,33 @@ def cmdMode(clearScreen=True):
             setCookie()
             saveEnv()
             showConfig()
-            print(input_ask)
+            print(get_input_ask())
         elif temp == '2':
             setProxy()
             saveEnv()
             showConfig()
-            print(input_ask)
+            print(get_input_ask())
         elif temp == '3':
             config()
             showConfig()
-            print(input_ask)
+            print(get_input_ask())
+        elif temp == '4':
+            if not getContext("readFile") or not os.path.exists(getContext("readFilePath")) or not os.path.isfile(
+                    getContext("readFilePath")):
+                input(tip_config_warning)
+                clear()
+                showConfig()
+                print(get_input_ask())
+                url_list = []
+            else:
+                url_list = read_data(getContext("readFilePath"))
         elif urlChecker(temp):
             url_list.append(temp)
         else:  # 输入错误, 重置
             input(input_warning)
             clear()
             showConfig()
-            print(input_ask)
+            print(get_input_ask())
             url_list = []
     if url_list:
         startCrawl(url_list)
@@ -61,7 +83,7 @@ def cmdMode(clearScreen=True):
 def config():  # 设置菜单
     clear()
     while True:
-        set = input(download_settings_ask)
+        set = input(get_download_settings_ask())
         if set == '0':
             break
         elif set == '1':
@@ -81,6 +103,12 @@ def config():  # 设置菜单
             saveEnv()
         elif set == '6':
             setFileName()
+            saveEnv()
+        elif set == '7':
+            setReadFileMode()
+            saveEnv()
+        elif set == '8':
+            setReadFilePath()
             saveEnv()
         else:
             input(input_num_warning)
@@ -130,6 +158,30 @@ def setFileName():  # 设置自定义保存文件名
             else:
                 input(unexpectVar_input_warning)
                 clear()
+    clear()
+
+
+def setReadFilePath():  # 设置自定义读取文件路径
+    clear()
+    while True:
+        filePath = input(set_readFilePath_ask).strip()
+        if filePath == '0':
+            break
+        else:
+            if os.path.exists(filePath) and os.path.isfile(filePath):
+                setContext('readFilePath', filePath)
+                break
+            else:
+                input(unexpectVar_path_input_warning)
+                clear()
+    clear()
+
+
+def setReadFileMode():  # 切换文件读取模式
+    clear()
+    setContext('readFile', not getContext("readFile"))
+    if not getContext("readFilePath"):
+        setReadFilePath()
     clear()
 
 

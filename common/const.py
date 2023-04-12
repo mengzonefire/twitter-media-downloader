@@ -9,6 +9,7 @@ Description: 存放全局常量
 import re
 import os
 import configparser
+
 version = '1.3.1'
 
 # const
@@ -36,7 +37,9 @@ context = {
     'fileName': '{userName}-{twtId}-{date}_{time}-{type}',
     'quoted': True,
     'retweeted': True,
-    'media': True  # 是否包含非媒体(纯文本)推文
+    'media': True,  # 是否包含非媒体(纯文本)推文
+    'readFile': False,  # 是否开启文件读取模式
+    'readFilePath': 'data'  # 文件路径 默认data
 }
 
 
